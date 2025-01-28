@@ -1,0 +1,7 @@
+/var/log/nagios-mod-gearman/nagios-mod-gearman-neb.log {
+    missingok
+    notifempty
+    copytruncate
+    compress
+    daily
+}

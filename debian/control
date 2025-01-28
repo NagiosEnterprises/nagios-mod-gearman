@@ -1,0 +1,58 @@
+Source: nagios-mod-gearman
+Section: net
+Priority: extra
+Maintainer: Nagios Development Team <devteam@nagios.com>
+Build-Depends: debhelper (>= 10), automake, libtool, libgearman-dev (>= 1.1), libncurses5-dev,
+               libltdl-dev, help2man, dctrl-tools, libperl-dev, pkg-config, libssl-dev, openssl
+Standards-Version: 3.9.1
+Homepage: https://www.nagios.org/projects/nagios-mod-gearman/
+
+Package: nagios-mod-gearman-doc
+Architecture: all
+Section: doc
+Depends: ${misc:Depends}
+Description: Documentation for Mod Gearman
+ This package contains documentation to the
+ nagios-mod-gearman-module and nagios-mod-gearman-worker packages.
+
+Package: nagios-mod-gearman-module
+Architecture: any
+Depends: ${misc:Depends}, libc6, openssl
+Description: Event broker module to distribute service checks.
+ Event broker module for Nagios. This module adds
+ servicechecks, hostchecks and eventhandlers to a queue on a Gearman
+ job server.
+ .
+ There can be multiple equal gearman job servers.
+
+Package: nagios-mod-gearman-worker
+Architecture: any
+Depends: ${shlibs:Depends}, ${misc:Depends}, openssl
+Description: Worker agent for nagios-mod-gearman
+ The worker agent for nagios-mod-geraman connects to a gearman job server,
+ runs active Nagios service checks, and return the results.
+ .
+ The agent can ask for any available check, or it can be bound to
+ specific hostgroups or servicegroups.
+ .
+ This package also includes a set of extra tools to send check results
+ to Nagios via a gearman server, and a plugin to monitor the gearman
+ job server itself.
+
+Package: nagios-mod-gearman-tools
+Architecture: any
+Depends: ${shlibs:Depends}, ${misc:Depends}
+Pre-Depends: ${misc:Pre-Depends}
+Description: Tools for nagios-mod-gearman
+ The Nagios Mod Gearman package contains tools to complement a nagios mod gearman
+ installation.
+ .
+ Such tools include:
+ .
+  - nagios-check-gearman - Nagios service check to monitor the gearman job
+    server
+  - nagios-gearman-top - Monitor the gearman job server
+  - nagios-send-gearman - Submit active and passive check results to a
+    gearman job server
+  - nagios-send-multi - Submit check results from the check_multi to a gearman
+    job server

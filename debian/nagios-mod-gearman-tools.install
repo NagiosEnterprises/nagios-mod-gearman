@@ -1,0 +1,4 @@
+debian/tmp/usr/bin/nagios-check-gearman usr/bin
+debian/tmp/usr/bin/nagios-gearman-top
+debian/tmp/usr/bin/nagios-send-gearman usr/bin
+debian/tmp/usr/bin/nagios-send-multi usr/bin

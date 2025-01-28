@@ -1,0 +1,4 @@
+debian/nagios-check-gearman.8
+debian/nagios-gearman-top.8
+debian/nagios-send-gearman.8
+debian/nagios-send-multi.8

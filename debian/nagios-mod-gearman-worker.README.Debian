@@ -1,0 +1,37 @@
+Usage
+=====
+
+Worker configuration
+--------------------
+
+Copy the example configuration file to /etc/nagios-mod-gearman
+
+# cp /usr/share/doc/nagios-mod-gearman-worker/examples/worker.conf /etc/nagios-mod-gearman
+
+Edit to point to your gearman job server, and set a password common to the
+module and the workers.
+
+Start the worker
+----------------
+
+# systemctl start nagios-mod-gearman-worker
+
+
+Check worker
+------------
+
+Check for the presence of the worker with "nagios-gearman-top".  You should see
+something like:
+
+$ nagios-gearman-top
+
+002010-12-14 16:08:36  -  localhost:4730   -  v0.14
+
+ Queue Name                  | Worker Available | Jobs Waiting | Jobs Running
+------------------------------------------------------------------------------
+ check_results               |               1  |           0  |           0
+ host                        |               1  |           0  |           0
+ service                     |               1  |           0  |           0
+ worker_somehost.example.com |               1  |           0  |           0
+------------------------------------------------------------------------------
+

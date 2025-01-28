@@ -1,0 +1,2 @@
+debian/tmp/etc/nagios-mod-gearman/module.conf etc/nagios-mod-gearman
+debian/tmp/usr/lib64/nagios-mod-gearman/nagios-mod-gearman.o

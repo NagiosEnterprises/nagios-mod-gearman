@@ -1,0 +1,30 @@
+Usage
+=====
+
+Module configuration
+--------------------
+
+Copy the example configuration file to /etc/nagios-mod-gearman
+
+# cp /usr/share/doc/nagios-mod-gearman-module/examples/module.conf /etc/nagios-mod-gearman
+
+Edit to point to your gearman job server, and set a password common to the
+module and the workers.
+
+
+Nagios configuration
+--------------------
+
+Add the following stanza to /usr/local/nagios/etc/nagios.cfg
+
+broker_module=/usr/lib64/nagios-mod-gearman/nagios-mod-gearman.o config=/etc/nagios-mod-gearman/module.conf
+
+
+Restart Nagios
+--------------
+
+Restart nagio, and check the log for warnings.  You should see the
+following message in your log:
+
+[...] Event broker module '/usr/lib64/nagios-mod-gearman/nagios-mod-gearman.o' initialized successfully.
+

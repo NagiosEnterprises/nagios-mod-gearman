@@ -1,0 +1,18 @@
+[Unit]
+Description=Nagios-Mod-Gearman Worker
+Documentation=https://www.nagios.org/projects/nagios-mod-gearman/
+After=syslog.target network.target
+
+[Service]
+PIDFile=/run/nagios-mod-gearman-worker/nagios-mod-gearman-worker.pid
+RuntimeDirectory=nagios-mod-gearman-worker
+ExecStart=/usr/sbin/nagios-mod-gearman-worker --config=/etc/nagios-mod-gearman/worker.conf --pidfile=/run/nagios-mod-gearman-worker/nagios-mod-gearman-worker.pid
+ExecReload=/bin/kill -HUP $MAINPID
+User=nagios
+Group=nagios
+StandardOutput=journal
+StandardError=inherit
+
+[Install]
+WantedBy=multi-user.target
+

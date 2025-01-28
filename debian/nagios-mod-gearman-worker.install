@@ -1,0 +1,2 @@
+debian/tmp/etc/nagios-mod-gearman/worker.conf etc/nagios-mod-gearman
+debian/tmp/usr/bin/nagios-mod-gearman-worker usr/sbin

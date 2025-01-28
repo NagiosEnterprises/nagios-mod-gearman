@@ -1,0 +1,588 @@
+/******************************************************************************
+ *
+ * nagios-mod-gearman - distribute checks with gearman
+ *
+ * Copyright (c) 2010 Sven Nierlein - sven.nierlein@consol.de
+ * Copyright (c) 2024 Nagios Development Team - devteam@nagios.com
+ *
+ * This file is part of nagios-mod-gearman.
+ *
+ *  nagios-mod-gearman is free software: you can redistribute it and/or modify
+ *  it under the terms of the GNU General Public License as published by
+ *  the Free Software Foundation, either version 3 of the License, or
+ *  (at your option) any later version.
+ *
+ *  nagios-mod-gearman is distributed in the hope that it will be useful,
+ *  but WITHOUT ANY WARRANTY; without even the implied warranty of
+ *  MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+ *  GNU General Public License for more details.
+ *
+ *  You should have received a copy of the GNU General Public License
+ *  along with nagios-mod-gearman.  If not, see <http://www.gnu.org/licenses/>.
+ *
+ *****************************************************************************/
+
+#include "config.h"
+#include "check_utils.h"
+#include "utils.h"
+#include "gearman_utils.h"
+#include "popenRWE.h"
+
+pid_t current_child_pid = 0;
+
+extern mod_gm_opt_t *mod_gm_opt;
+extern gm_job_t * current_job;
+extern gearman_client_st *current_client;
+extern gearman_job_st *current_gearman_job;
+
+/* convert number to signal name */
+char *nr2signal(int sig) {
+    char * signame = NULL;
+    switch(sig) {
+        case 1:  signame = "SIGHUP";
+                 break;
+        case 2:  signame = "SIGINT";
+                 break;
+        case 3:  signame = "SIGQUIT";
+                 break;
+        case 4:  signame = "SIGILL";
+                 break;
+        case 5:  signame = "SIGTRAP";
+                 break;
+        case 6:  signame = "SIGABRT";
+                 break;
+        case 7:  signame = "SIGBUS";
+                 break;
+        case 8:  signame = "SIGFPE";
+                 break;
+        case 9:  signame = "SIGKILL";
+                 break;
+        case 10: signame = "SIGUSR1";
+                 break;
+        case 11: signame = "SIGSEGV";
+                 break;
+        case 12: signame = "SIGUSR2";
+                 break;
+        case 13: signame = "SIGPIPE";
+                 break;
+        case 14: signame = "SIGALRM";
+                 break;
+        case 15: signame = "SIGTERM";
+                 break;
+        case 16: signame = "SIGURG";
+                 break;
+        default: signame = gm_malloc(20);
+                 snprintf(signame, 20, "signal %d", sig);
+                 return signame;
+                 break;
+    }
+    return gm_strdup(signame);
+}
+
+
+/* extract check result */
+char *extract_check_result(FILE *fp, int trimmed) {
+    char *output;
+    char *escaped;
+
+    output   = gm_malloc(sizeof(char*)*GM_BUFFERSIZE);
+    output[0]='\x0';
+    read_filepointer(&output, fp);
+
+    escaped  = gm_escape_newlines(output, trimmed);
+    free(output);
+    return(escaped);
+}
+
+
+/* run a check */
+int run_check(char *processed_command, char **ret, char **err) {
+    char *argv[MAX_CMD_ARGS];
+    FILE *fp;
+    pid_t pid;
+    int pipe_stdout[2], pipe_stderr[2], pipe_rwe[3];
+    int retval;
+    int i;
+    int restricted_ok = FALSE;
+    sigset_t mask;
+
+    /* verify restricted paths
+     * make sure our command does not contain any bash special characters
+     * and starts with one of the allowed paths
+     */
+    if(mod_gm_opt->restrict_path_num) {
+        if(*processed_command != '/') {
+            *err = gm_strdup("");
+            gm_asprintf(ret, "ERROR: restricted paths in affect, but command does not start with an absolute path: %.*s...\n", 8, processed_command);
+            return(GM_EXIT_UNKNOWN);
+        }
+        if(strpbrk(processed_command,mod_gm_opt->restrict_command_characters) != NULL) {
+            *err = gm_strdup("");
+            gm_asprintf(ret, "ERROR: restricted paths in affect, but command contains forbidden character(s): %.*s...\n", 8, processed_command);
+            return(GM_EXIT_UNKNOWN);
+        }
+        for(i=0;i<mod_gm_opt->restrict_path_num;i++) {
+            if(starts_with(mod_gm_opt->restrict_path[i], processed_command)) {
+                restricted_ok = TRUE;
+            }
+        }
+        if(!restricted_ok) {
+            *err = gm_strdup("");
+            gm_asprintf(ret, "ERROR: command does not start with any of the restricted paths: %.*s...\n", 8, processed_command);
+            return(GM_EXIT_UNKNOWN);
+        }
+    }
+
+    /* check for check execution method (shell or execvp)
+     * command line does not have to contain shell meta characters
+     * and cmd must begin with a /. Otherwise "BLAH=BLUB cmd" would lead
+     * to file not found errors
+     */
+    if((*processed_command == '/' || *processed_command == '.') && strpbrk(processed_command,"!$^&*()~[]\\|{};<>?`\"'") == NULL) {
+        /* use the fast execvp when there are no shell characters */
+        gm_log( GM_LOG_TRACE, "using execvp, no shell characters found\n" );
+
+        parse_command_line(processed_command,argv);
+        if(!argv[0])
+            _exit(STATE_UNKNOWN);
+
+        if(pipe(pipe_stdout)) {
+            gm_log( GM_LOG_ERROR, "error creating pipe: %s\n", strerror(errno));
+            _exit(STATE_UNKNOWN);
+        }
+        if(pipe(pipe_stderr)) {
+            gm_log( GM_LOG_ERROR, "error creating pipe: %s\n", strerror(errno));
+            _exit(STATE_UNKNOWN);
+        }
+        if((pid=fork())<0){
+            gm_log( GM_LOG_ERROR, "fork error\n");
+            _exit(STATE_UNKNOWN);
+        }
+        else if(!pid){
+            /* remove all customn signal handler */
+            sigfillset(&mask);
+            sigprocmask(SIG_UNBLOCK, &mask, NULL);
+
+            /* child process */
+            if((dup2(pipe_stdout[1],STDOUT_FILENO)<0)){
+                gm_log( GM_LOG_ERROR, "dup2 error\n");
+                _exit(STATE_UNKNOWN);
+            }
+            if((dup2(pipe_stderr[1],STDERR_FILENO)<0)){
+                gm_log( GM_LOG_ERROR, "dup2 error\n");
+                _exit(STATE_UNKNOWN);
+            }
+            close(pipe_stdout[1]);
+            close(pipe_stderr[1]);
+            current_child_pid = getpid();
+            execvp(argv[0], argv);
+            if(errno == 2)
+                _exit(127);
+            if(errno == 13)
+                _exit(126);
+            _exit(STATE_UNKNOWN);
+        }
+
+        /* parent */
+        /* prepare stdout pipe reading */
+        close(pipe_stdout[1]);
+        fp=fdopen(pipe_stdout[0],"r");
+        if(!fp){
+            gm_log( GM_LOG_ERROR, "fdopen error\n");
+            _exit(STATE_UNKNOWN);
+        }
+        *ret = extract_check_result(fp, GM_DISABLED);
+        fclose(fp);
+
+        /* prepare stderr pipe reading */
+        close(pipe_stderr[1]);
+        fp=fdopen(pipe_stderr[0],"r");
+        if(!fp){
+            gm_log( GM_LOG_ERROR, "fdopen error\n");
+            _exit(STATE_UNKNOWN);
+        }
+        *err = extract_check_result(fp, GM_ENABLED);
+        fclose(fp);
+
+        close(pipe_stdout[0]);
+        close(pipe_stderr[0]);
+        if(waitpid(pid,&retval,0)!=pid)
+            retval=-1;
+    }
+    else {
+        /* use the slower popen when there were shell characters */
+        gm_log( GM_LOG_TRACE, "using popen, found shell characters\n" );
+        current_child_pid = getpid();
+        pid = popenRWE(pipe_rwe, processed_command);
+
+        /* extract check result */
+        fp=fdopen(pipe_rwe[1],"r");
+        if(!fp){
+            gm_log( GM_LOG_ERROR, "fdopen error\n");
+            _exit(STATE_UNKNOWN);
+        }
+        *ret = extract_check_result(fp, GM_DISABLED);
+        fclose(fp);
+
+        /* extract check stderr */
+        fp=fdopen(pipe_rwe[2],"r");
+        if(!fp){
+            gm_log( GM_LOG_ERROR, "fdopen error\n");
+            _exit(STATE_UNKNOWN);
+        }
+        *err = extract_check_result(fp, GM_ENABLED);
+        fclose(fp);
+
+        /* close the process */
+        retval=pcloseRWE(pid, pipe_rwe);
+    }
+
+    return retval;
+}
+
+
+/* execute this command with given timeout */
+int execute_safe_command(gm_job_t * exec_job, int fork_exec, char * identifier) {
+    int pipe_stdout[2] , pipe_stderr[2];
+    int return_code;
+    int pclose_result;
+    int x;
+    char *plugin_output, *plugin_error, *bufdup;
+    char source[GM_BUFFERSIZE];
+    struct timeval start_time,end_time;
+    pid_t pid    = 0;
+    source[0]    = '\x0';
+
+    gm_log( GM_LOG_TRACE, "execute_safe_command(%d, %s)\n", exec_job->timeout, exec_job->command_line );
+
+    /* mark all filehandles to close on exec */
+    for(x = 0; x<=64; x++)
+        fcntl(x, F_SETFD, FD_CLOEXEC);
+
+    signal(SIGTERM, SIG_DFL);
+    signal(SIGINT, SIG_DFL);
+
+    if(exec_job->start_time.tv_sec == 0) {
+        gettimeofday(&start_time,NULL);
+        exec_job->start_time = start_time;
+    }
+
+    /* fork a child process */
+    if(fork_exec == GM_ENABLED) {
+        if(pipe(pipe_stdout) != 0)
+            perror("pipe stdout");
+        if(pipe(pipe_stderr) != 0)
+            perror("pipe stderr");
+
+        pid=fork();
+
+        /*fork error */
+        if( pid == -1 ) {
+            if(exec_job->output != NULL)
+                free(exec_job->output);
+            exec_job->output      = gm_strdup("(Error On Fork)");
+            exec_job->return_code = 3;
+            return(GM_ERROR);
+        }
+    }
+
+    /* we are in the child process */
+    if( fork_exec == GM_DISABLED || pid == 0 ) {
+
+        /* become the process group leader */
+        setpgid(0,0);
+        pid = getpid();
+
+        if( fork_exec == GM_ENABLED ) {
+            close(pipe_stdout[0]);
+            close(pipe_stderr[0]);
+        }
+        signal(SIGALRM, check_alarm_handler);
+        alarm(exec_job->timeout);
+
+        /* run the plugin check command */
+        pclose_result = run_check(exec_job->command_line, &plugin_output, &plugin_error);
+        return_code   = pclose_result;
+
+        if(fork_exec == GM_ENABLED) {
+            if(write(pipe_stdout[1], plugin_output, strlen(plugin_output)+1) <= 0)
+                perror("write stdout");
+            if(write(pipe_stderr[1], plugin_error, strlen(plugin_error)+1) <= 0)
+                perror("write");
+
+            if(pclose_result == -1) {
+                char error[GM_BUFFERSIZE];
+                snprintf(error, sizeof(error), "error on %s: %s", identifier, strerror(errno));
+                if(write(pipe_stdout[1], error, strlen(error)+1) <= 0)
+                    perror("write");
+            }
+
+            return_code = real_exit_code(pclose_result);
+            free(plugin_output);
+            free(plugin_error);
+            _exit(return_code);
+        }
+    }
+
+    /* we are the parent */
+    if( fork_exec == GM_DISABLED || pid > 0 ){
+
+        if( fork_exec == GM_ENABLED) {
+            gm_log( GM_LOG_TRACE, "started check with pid: %d\n", pid);
+
+            close(pipe_stdout[1]);
+            close(pipe_stderr[1]);
+
+            waitpid(pid, &return_code, 0);
+            gm_log( GM_LOG_TRACE, "finished check from pid: %d with status: %d\n", pid, return_code);
+            /* get all lines of plugin output */
+            plugin_output = gm_malloc(GM_BUFFERSIZE);
+            plugin_output[0]='\x0';
+            plugin_error  = gm_malloc(GM_BUFFERSIZE);
+            plugin_error[0]='\x0';
+            read_pipe(&plugin_output, pipe_stdout[0]);
+            read_pipe(&plugin_error, pipe_stderr[0]);
+        }
+        return_code = real_exit_code(return_code);
+
+        /* file not executable? */
+        if(return_code == 126) {
+            return_code = STATE_CRITICAL;
+            free(plugin_output);
+            gm_asprintf(&plugin_output, "CRITICAL: Return code of 126 is out of bounds. Make sure the plugin you're trying to run is executable. (worker: %s)", identifier);
+        }
+        /* file not found errors? */
+        else if(return_code == 127) {
+            return_code = STATE_CRITICAL;
+            free(plugin_output);
+            gm_asprintf(&plugin_output, "CRITICAL: Return code of 127 is out of bounds. Make sure the plugin you're trying to run actually exists. (worker: %s)", identifier);
+        }
+        /* signaled */
+        else if(return_code >= 128 && return_code < 144) {
+            char * signame = nr2signal((int)(return_code-128));
+            bufdup = gm_strdup(plugin_output);
+            free(plugin_output);
+            gm_asprintf(&plugin_output, "CRITICAL: Return code of %d is out of bounds. Plugin exited by signal %s. (worker: %s)\\n%s", (int)(return_code), signame, identifier, bufdup);
+            return_code = STATE_CRITICAL;
+            free(bufdup);
+            free(signame);
+        }
+        /* other error codes > 3 */
+        else if(return_code > 3) {
+            gm_log( GM_LOG_DEBUG, "check exited with exit code > 3. Exit: %d\n", (int)(return_code));
+            gm_log( GM_LOG_DEBUG, "stdout: %s\n", plugin_output);
+            bufdup = gm_strdup(plugin_output);
+            free(plugin_output);
+            gm_asprintf(&plugin_output, "CRITICAL: Return code of %d is out of bounds. (worker: %s)\\n%s", (int)(return_code), identifier, bufdup);
+            free(bufdup);
+            if(return_code != 25 && mod_gm_opt->workaround_rc_25 == GM_DISABLED) {
+                return_code = STATE_CRITICAL;
+            }
+        }
+
+        exec_job->output      = plugin_output;
+        exec_job->error       = plugin_error;
+        exec_job->return_code = return_code;
+        if( fork_exec == GM_ENABLED) {
+            close(pipe_stdout[0]);
+            close(pipe_stderr[0]);
+        }
+    }
+    alarm(0);
+    current_child_pid = 0;
+    pid               = 0;
+
+    /* record check result info */
+    gettimeofday(&end_time, NULL);
+    exec_job->finish_time = end_time;
+
+    /* did we have a timeout? */
+    if(exec_job->timeout < ((int)end_time.tv_sec - (int)exec_job->start_time.tv_sec)) {
+        exec_job->return_code   = mod_gm_opt->timeout_return;
+        exec_job->early_timeout = 1;
+        free(exec_job->output);
+        if ( !strcmp( exec_job->type, "service" ) ) {
+            gm_asprintf(&exec_job->output, "(Service Check Timed Out On Worker: %s)", identifier);
+        }
+        else {
+            gm_asprintf(&exec_job->output, "(Host Check Timed Out On Worker: %s)", identifier);
+        }
+    }
+
+    snprintf( source, sizeof( source )-1, "Nagios-Mod-Gearman Worker @ %s", identifier);
+    if(exec_job->source != NULL)
+        free(exec_job->source);
+    exec_job->source = gm_strdup(source);
+
+    return(GM_OK);
+}
+
+
+/* called when check runs into timeout */
+void check_alarm_handler(int sig) {
+    pid_t pid;
+
+    gm_log( GM_LOG_TRACE, "check_alarm_handler(%i)\n", sig );
+    pid = getpid();
+    if(current_job != NULL && mod_gm_opt->fork_on_exec == GM_DISABLED) {
+        /* create a useful log message*/
+        if ( !strcmp( current_job->type, "service" ) ) {
+            gm_log( GM_LOG_INFO, "timeout (%is) hit for servicecheck: %s - %s\n", current_job->timeout, current_job->host_name, current_job->service_description);
+        }
+        else if ( !strcmp( current_job->type, "host" ) ) {
+            gm_log( GM_LOG_INFO, "timeout (%is) hit for hostcheck: %s\n", current_job->timeout, current_job->host_name);
+        }
+        else if ( !strcmp( current_job->type, "eventhandler" ) ) {
+            gm_log( GM_LOG_INFO, "timeout (%is) hit for eventhandler: %s\n", current_job->timeout, current_job->command_line);
+        }
+        EVP_CIPHER_CTX * ctx = mod_gm_crypt_init(mod_gm_opt->crypt_key);
+        send_timeout_result(current_job, ctx);
+        mod_gm_crypt_deinit(ctx);
+        gearman_job_send_complete(current_gearman_job, NULL, 0);
+    }
+
+    signal(SIGTERM, SIG_IGN);
+    gm_log( GM_LOG_TRACE, "send SIGTERM to %d\n", pid);
+    kill(-pid, SIGTERM);
+    kill(pid, SIGTERM);
+    signal(SIGTERM, SIG_DFL);
+    sleep(1);
+
+    signal(SIGINT, SIG_IGN);
+    gm_log( GM_LOG_TRACE, "send SIGINT to %d\n", pid);
+    kill(-pid, SIGINT);
+    kill(pid, SIGINT);
+    signal(SIGINT, SIG_DFL);
+    sleep(1);
+
+    /* skip sigkill in test mode */
+    if(getenv("MODGEARMANTEST") == NULL) {
+        gm_log( GM_LOG_TRACE, "send SIGKILL to %d\n", pid);
+        kill(-pid, SIGKILL);
+        kill(pid, SIGKILL);
+    }
+
+    return;
+}
+
+/* send kill to all forked processes */
+void kill_child_checks(void) {
+    int retval;
+    pid_t pid;
+
+    signal(SIGINT, SIG_IGN);
+    pid = getpid();
+    if(current_child_pid > 0 && current_child_pid != pid) {
+        gm_log( GM_LOG_TRACE, "kill_child_checks(): send SIGINT to %d\n", current_child_pid);
+        kill(-current_child_pid, SIGINT);
+        kill(current_child_pid, SIGINT);
+        sleep(1);
+        if(waitpid(current_child_pid,&retval,WNOHANG)!=0) {
+            signal(SIGINT, SIG_DFL);
+            return;
+        }
+        if(pid_alive(current_child_pid)) {
+            gm_log( GM_LOG_TRACE, "kill_child_checks(): send SIGKILL to %d\n", current_child_pid);
+            kill(current_child_pid, SIGKILL);
+        }
+    }
+    gm_log( GM_LOG_TRACE, "send SIGINT to %d\n", pid);
+    kill(0, SIGINT);
+    signal(SIGINT, SIG_DFL);
+    return;
+}
+
+
+void send_timeout_result(gm_job_t * exec_job, EVP_CIPHER_CTX * ctx) {
+    struct timeval end_time;
+    char buffer[GM_BUFFERSIZE];
+    buffer[0] = '\x0';
+
+    gm_log( GM_LOG_TRACE, "send_timeout_result()\n");
+
+    gettimeofday(&end_time, NULL);
+    exec_job->finish_time = end_time;
+
+    exec_job->return_code   = mod_gm_opt->timeout_return;
+    exec_job->early_timeout = 1;
+    if ( !strcmp( exec_job->type, "service" ) )
+        snprintf( buffer, sizeof( buffer ) -1, "(Service Check Timed Out On Worker: %s)\n", mod_gm_opt->identifier);
+    if ( !strcmp( exec_job->type, "host" ) )
+        snprintf( buffer, sizeof( buffer ) -1, "(Host Check Timed Out On Worker: %s)\n", mod_gm_opt->identifier);
+    free(exec_job->output);
+    exec_job->output = gm_strdup( buffer );
+
+    send_result_back(exec_job, ctx);
+
+    return;
+}
+
+
+/* send failed result */
+void send_failed_result(gm_job_t * exec_job, int sig, EVP_CIPHER_CTX * ctx) {
+    struct timeval end_time;
+    char buffer[GM_BUFFERSIZE];
+    char * signame;
+    buffer[0] = '\x0';
+
+    gm_log( GM_LOG_TRACE, "send_failed_result()\n");
+
+    gettimeofday(&end_time, NULL);
+    exec_job->finish_time = end_time;
+    exec_job->return_code = STATE_CRITICAL;
+
+    signame = nr2signal(sig);
+    snprintf( buffer, sizeof( buffer )-1, "(Return code of %d is out of bounds. Worker exited by signal %s on worker: %s)", sig, signame, mod_gm_opt->identifier);
+    free(exec_job->output);
+    exec_job->output = gm_strdup( buffer );
+    free(signame);
+
+    send_result_back(exec_job, ctx);
+
+    return;
+}
+
+
+/* convert a command line to an array of arguments, suitable for exec* functions */
+int parse_command_line(char *cmd, char *argv[MAX_CMD_ARGS]) {
+    unsigned int argc=0;
+    char *parsed_cmd;
+
+    /* Skip initial white-space characters. */
+    for(parsed_cmd=cmd;isspace(*cmd);++cmd)
+        ;
+
+    /* Parse command line. */
+    while(*cmd&&(argc<MAX_CMD_ARGS-1)){
+        argv[argc++]=parsed_cmd;
+        switch(*cmd){
+        case '\'':
+            while((*cmd)&&(*cmd!='\''))
+                *(parsed_cmd++)=*(cmd++);
+            if(*cmd)
+                ++cmd;
+            break;
+        case '"':
+            while((*cmd)&&(*cmd!='"')){
+                if((*cmd=='\\')&&cmd[1]&&strchr("\"\\\n",cmd[1]))
+                    ++cmd;
+                *(parsed_cmd++)=*(cmd++);
+                }
+            if(*cmd)
+                ++cmd;
+            break;
+        default:
+            while((*cmd)&&!isspace(*cmd)){
+                if((*cmd=='\\')&&cmd[1])
+                    ++cmd;
+                *(parsed_cmd++)=*(cmd++);
+                }
+            }
+        while(isspace(*cmd))
+            ++cmd;
+        *(parsed_cmd++)='\0';
+        }
+    argv[argc]=NULL;
+
+    return GM_OK;
+}
