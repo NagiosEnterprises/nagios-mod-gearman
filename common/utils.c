@@ -934,6 +934,10 @@ int parse_args_line(mod_gm_opt_t *opt, char * arg, int recursion_level) {
            || !strcmp( key, "backgrounding-threshold" )
            || !strcmp( key, "load_cpu_multi" )
            || !strcmp( key, "mem_limit" )
+           || !strcmp( key, "enable_embedded_perl")
+           || !strcmp( key, "use_embedded_perl_implicitly")
+           || !strcmp( key, "use_perl_cache")
+           || !strcmp( key, "p1_file")
     ) {
         gm_log( GM_LOG_DEBUG, "ignoring unsupported option '%s'\n", key );
     }
