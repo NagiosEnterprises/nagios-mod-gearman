@@ -1,6 +1,6 @@
 This file documents the revision history for nagios-mod-gearman.
 
-1.0.0 Fri Jan 24 03:42:58 PM CST 2025
+1.0.1 Fri Jan 24 03:42:58 PM CST 2025
           - Fork https://github.com/sni/mod_gearman
           - Add back support for Nagios Core
           - Remove support for Naemon

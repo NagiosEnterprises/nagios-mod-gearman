@@ -1,5 +1,5 @@
 Name:          nagios-mod-gearman
-Version:       1.0.0
+Version:       1.0.1
 Release:       1%{?dist}
 License:       GNU Public License version 3
 Packager:      Nagios Development Team <devteam@nagios.com>
@@ -92,5 +92,5 @@ getent passwd nagios >/dev/null || \
 
 %changelog
 * Fri Dec 06 2024 Nagios
-- 1.0.0 Build
+- 1.0.1 Build
 
