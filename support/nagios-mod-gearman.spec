@@ -91,6 +91,13 @@ getent passwd nagios >/dev/null || \
 %docdir %{_defaultdocdir}
 
 %changelog
-* Fri Dec 06 2024 Nagios
-- 1.0.1 Build
+* 1.0.0 24 Jan 2025
+- Fork https://github.com/sni/mod_gearman
+- Add back support for Nagios Core
+- Remove support for Naemon
+- Remove flatten_latency_window
+- Remove check_dummy overrides
+- Remove embedded perl
 
+* 1.0.1 26 Feb 2025
+- Add support for embedded perl back to provide backward compatibility
