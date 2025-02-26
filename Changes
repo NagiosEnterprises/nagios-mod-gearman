@@ -1,9 +1,12 @@
 This file documents the revision history for nagios-mod-gearman.
 
-1.0.1 Fri Jan 24 03:42:58 PM CST 2025
+1.0.0 24 Jan 2025
           - Fork https://github.com/sni/mod_gearman
           - Add back support for Nagios Core
           - Remove support for Naemon
           - Remove flatten_latency_window
           - Remove check_dummy overrides
           - Remove embedded perl
+
+1.0.1 26 Feb 2025
+          - Add support for embedded perl back to provide backward compatibility
