@@ -91,7 +91,10 @@ getent passwd nagios >/dev/null || \
 %docdir %{_defaultdocdir}
 
 %changelog
-* 1.0.0 24 Jan 2025
+* Wed Feb 26 2025 Nagios Build Team <buildserver@nagios.com> - 1.0.1
+- Add support for embedded perl back to provide backward compatibility
+
+* Fri Jan 24 2025 Nagios Build Team <buildserver@nagios.com> - 1.0.0
 - Fork https://github.com/sni/mod_gearman
 - Add back support for Nagios Core
 - Remove support for Naemon
@@ -99,5 +102,3 @@ getent passwd nagios >/dev/null || \
 - Remove check_dummy overrides
 - Remove embedded perl
 
-* 1.0.1 26 Feb 2025
-- Add support for embedded perl back to provide backward compatibility
