@@ -344,7 +344,7 @@ If you downloaded all of the packages in the previous step you should have gearm
 
 The gearmand package is available on the Extra Packages for Enterprise Linux (EPEL) repository so the server needs to have that available.
 
-To install gearmand, run this as root
+To install the latest gearmand package on the Nagios server, run this as root.
 dnf install gearmand
 
 Enable gearmand to start at boot and to restart it, run this as root.
@@ -355,7 +355,7 @@ systemctl start gearmand
 
 Ubuntu / Debian
 
-To install gearmand, run this as root.
+To install the latest gearmand package on the Nagios server, run this as root.
 
 apt install gearman-job-server
 
