@@ -708,8 +708,7 @@ Path to the pidfile.
 
 
 job_timeout::
-Default job timeout in seconds. Currently this value is only used for
-eventhandler. The worker will use the values from the core for host
+Default job timeout in seconds. The worker will use the values from the core for host
 and service checks.
 Default: 60
 +
