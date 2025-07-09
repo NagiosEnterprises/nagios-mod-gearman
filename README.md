@@ -19,7 +19,7 @@ It consists of three parts:
  * The counterpart is one or more worker clients executing the checks.
    Worker can be configured to only run checks for specific host- or
    servicegroups.
- * And you need at least one http://gearman.org[Gearman Job Server]
+ * And you need at least one [Gearman Job Server](http://gearman.org)
    running.
  * See the <<common-scenarios,common scenarios>> for some examples.
 
