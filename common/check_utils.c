@@ -164,6 +164,19 @@ int run_check(char *processed_command, char **ret, char **err) {
             sigprocmask(SIG_UNBLOCK, &mask, NULL);
 
             /* child process */
+            if(fcntl(STDIN_FILENO, F_GETFD) < 0) {
+                int devnull = open("/dev/null", O_RDONLY);
+                if(devnull < 0)
+                    _exit(STATE_UNKNOWN);
+                if(dup2(devnull, STDIN_FILENO) < 0)
+                    _exit(STATE_UNKNOWN);
+                if(devnull != STDIN_FILENO)
+                    close(devnull);
+            }
+            else {
+                fcntl(STDIN_FILENO, F_SETFD, 0);
+            }
+
             if((dup2(pipe_stdout[1],STDOUT_FILENO)<0)){
                 gm_log( GM_LOG_ERROR, "dup2 error\n");
                 _exit(STATE_UNKNOWN);
@@ -172,6 +185,8 @@ int run_check(char *processed_command, char **ret, char **err) {
                 gm_log( GM_LOG_ERROR, "dup2 error\n");
                 _exit(STATE_UNKNOWN);
             }
+            close(pipe_stdout[0]);
+            close(pipe_stderr[0]);
             close(pipe_stdout[1]);
             close(pipe_stderr[1]);
             current_child_pid = getpid();
