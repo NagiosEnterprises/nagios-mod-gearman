@@ -10,3 +10,7 @@ This file documents the revision history for nagios-mod-gearman.
 
 1.0.1 26 Feb 2025
           - Add support for embedded perl back to provide backward compatibility
+
+1.0.2 09 Nov 2026
+          - Open stdin on /dev/null in the execvp check path so plugins
+            (e.g. check_dns/nslookup) match Nagios Core behavior

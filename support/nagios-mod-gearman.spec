@@ -1,5 +1,5 @@
 Name:          nagios-mod-gearman
-Version:       1.0.1
+Version:       1.0.2
 Release:       1%{?dist}
 License:       GNU Public License version 3
 Packager:      Nagios Development Team <devteam@nagios.com>
@@ -91,6 +91,9 @@ getent passwd nagios >/dev/null || \
 %docdir %{_defaultdocdir}
 
 %changelog
+* Mon Nov 09 2026 Nagios Build Team <buildserver@nagios.com> - 1.0.2
+- Open stdin on /dev/null during execvp command execution
+
 * Wed Feb 26 2025 Nagios Build Team <buildserver@nagios.com> - 1.0.1
 - Add support for embedded perl back to provide backward compatibility
 
@@ -101,4 +104,3 @@ getent passwd nagios >/dev/null || \
 - Remove flatten_latency_window
 - Remove check_dummy overrides
 - Remove embedded perl
-
