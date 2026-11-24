@@ -231,7 +231,7 @@ Building packages from source.
 
 Extract the tarball
 
-tar xzf nagios-mod-gearman-1.0.1.tar.gz
+tar xzf nagios-mod-gearman-1.0.2.tar.gz
 
 To setup the development, the following packages need to be installed by running this as root.
 
@@ -239,7 +239,7 @@ apt install automake libncurses-dev gearman libgearman-dev help2man dctrl-tools 
 
 Run the following as root to compile Nagios-Mod-Gearman and to install it.
 
-cd nagios-mod-gearman-1.0.1
+cd nagios-mod-gearman-1.0.2
 chmod a+x autogen.sh
 ./autogen.sh
 ./configure
@@ -287,7 +287,7 @@ Building packages from source.
 
 Extract the tarball
 
-tar xzf nagios-mod-gearman-1.0.1.tar.gz
+tar xzf nagios-mod-gearman-1.0.2.tar.gz
 
 To setup the development, the following packages and repositories need to be installed by running this as root.
 
@@ -309,7 +309,7 @@ yum install autoconf automake libtool boost-devel boost-program-options libgearm
 
 Run the following as root to compile Nagios-Mod-Gearman and to install it.
 
-cd nagios-mod-gearman-1.0.1
+cd nagios-mod-gearman-1.0.2
 chmod a+x autogen.sh
 ./autogen.sh
 ./configure
