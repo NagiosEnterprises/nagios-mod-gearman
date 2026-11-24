@@ -278,20 +278,48 @@ systemctl restart nagios
 
 Centos Stream / Redhat / Oracle Linux
 ~~~~~~~~~~~~~
-The easiest way to install Nagios Mod Gearman is to build RPM packages.
+Supported platforms: EL 8, EL 9, and EL 10 (RHEL, CentOS Stream, Oracle Linux).
 
-It is strongly recommended to use the RPM files in the Build folder associated
-with the OS you are installing on, it contains the prebuilt RHEL 8 and RHEL 9 packages.
+Install from the Nagios repository (recommended)
+^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+Prebuilt RPMs are published to https://repo.nagios.com for EL 8, EL 9, and EL 10
+when a release is published. Until the packages for your target version appear
+there, use the "Building packages from source" steps below (or install a locally
+built RPM).
 
-Building packages from source.
+Add the Nagios repository for your OS major version (as root), then install:
 
+RHEL / CentOS Stream / Oracle Linux 8
+
+rpm -Uvh https://repo.nagios.com/nagios/8/nagios-repo-8-2.el8.noarch.rpm
+dnf install nagios-mod-gearman
+
+RHEL / CentOS Stream / Oracle Linux 9
+
+rpm -Uvh https://repo.nagios.com/nagios/9/nagios-repo-9-2.el9.noarch.rpm
+dnf install nagios-mod-gearman
+
+RHEL / CentOS Stream / Oracle Linux 10
+
+rpm -Uvh https://repo.nagios.com/nagios/10/nagios-repo-10-1.el10.noarch.rpm
+dnf install nagios-mod-gearman
+
+On EL 10, dependencies such as libgearman are provided by the Nagios repository.
+gearmand still comes from EPEL (see "Install Gearmand on the Nagios server"
+below).
+
+The nagios-mod-gearman RPM includes the NEB module, worker, and tools
+(nagios-check-gearman, nagios-gearman-top, etc.).
+
+Building packages from source
+^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
 Extract the tarball
 
 tar xzf nagios-mod-gearman-1.0.2.tar.gz
 
 To setup the development, the following packages and repositories need to be installed by running this as root.
 
-CentOS 9
+CentOS Stream 9 / 10
 
 yum install epel-release -y
 dnf config-manager --set-enabled crb
@@ -305,7 +333,15 @@ RHEL 9
 yum -y install https://dl.fedoraproject.org/pub/epel/epel-release-latest-9.noarch.rpm
 subscription-manager repos --enable codeready-builder-for-rhel-9-x86_64-rpms
 
+RHEL 10
+
+yum -y install https://dl.fedoraproject.org/pub/epel/epel-release-latest-10.noarch.rpm
+subscription-manager repos --enable codeready-builder-for-rhel-10-x86_64-rpms
+
 yum install autoconf automake libtool boost-devel boost-program-options libgearman libgearman-devel libtool-ltdl-devel ncurses-devel rpm-build gearmand
+
+On EL 10, if libgearman / libgearman-devel are not available from EPEL, install
+the Nagios repository first (see above) so those packages can be resolved.
 
 Run the following as root to compile Nagios-Mod-Gearman and to install it.
 
@@ -319,7 +355,8 @@ make install
 To build the rpm packages, just run the following.
 make rpm
 
-To install the rpm, run this (replace x.x.x with the version number and the os version change elx)
+To install the rpm, run this (replace x.x.x with the version number and elx with
+your OS tag, e.g. el8, el9, or el10)
 yum localinstall nagios-mod-gearman-x.x.x-1.elx.x86_64.rpm
 
 To enable the worker to start at boot and to start it, run this.
